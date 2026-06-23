@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Radio, Table, Input, Select, Collapse } from "antd";
-import { useState } from "react";
+import api from "../api";
 
 function Home() {
   const [view, setView] = useState(1);
@@ -12,7 +12,7 @@ function Home() {
     "Awaiting Certificate",
   ];
 
-  const [compliances, setCompliances] = useState([
+  const sampleData = [
     {
       id: 1,
       property: "Flat A",
@@ -34,37 +34,66 @@ function Home() {
       status: "Supplier Instructed",
       dueDate: "2026-07-15",
     },
-  ]);
+  ];
 
-  const handleStatusChange = (id, newStatus) => {
-    setCompliances(
-      compliances.map((item) =>
-        item.id === id ? { ...item, status: newStatus } : item,
-      ),
-    );
+  const [compliances, setCompliances] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const data = await api.getCompliances();
+        if (mounted && Array.isArray(data)) setCompliances(data);
+        else if (mounted) setCompliances(sampleData);
+      } catch (e) {
+        if (mounted) setCompliances(sampleData);
+      }
+    }
+
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleStatusChange = async (id, newStatus) => {
+    setCompliances((prev) => prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item)));
+    try {
+      await api.updateCompliance(id, { status: newStatus });
+    } catch (e) {
+      // keep optimistic update; optionally notify user
+    }
   };
 
-  const handleChange = (id, field, value) => {
-    setCompliances(
-      compliances.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
-      ),
-    );
+  const handleChange = async (id, field, value) => {
+    setCompliances((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
+    try {
+      await api.updateCompliance(id, { [field]: value });
+    } catch (e) {
+      // optimistic update kept
+    }
   };
 
-  const addCompliance = (status) => {
-  setCompliances(prev => [
-    ...prev,
-    {
-      id: Date.now(),
-      property: "",
-      compliance: "",
-      dueDate: "",
-      status,
-    },
-  ]);
-};
-  
+  const addCompliance = async (status) => {
+    const payload = { property: "", compliance: "", dueDate: "", status };
+    try {
+      const created = await api.addCompliance(payload);
+      setCompliances((prev) => [...prev, created]);
+    } catch (e) {
+      setCompliances((prev) => [...prev, { id: Date.now(), ...payload }]);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await api.deleteCompliance(id);
+      setCompliances((prev) => prev.filter((item) => item.id !== id));
+    } catch (e) {
+      setCompliances((prev) => prev.filter((item) => item.id !== id));
+    }
+  };
 
   return (
     <div className="h-screen w-full p-4">
@@ -92,7 +121,7 @@ function Home() {
                 const items = compliances.filter(
                   (item) => item.status === status,
                 );
-                 
+
                 return (
                   <div key={status} className="mb-6">
                     <div className="font-bold text-lg border-b pb-2 mb-2">
@@ -123,28 +152,58 @@ function Home() {
                             <option key={s} value={s}>
                               {s}
                             </option>
-                            
                           ))}
-                          
                         </select>
 
-                        <div><input value={item.property} onChange={(e) => handleChange(item.id,'property',e.target.value)}  className="w-full border-none outline-none"/></div>
-                        <div><input value={item.compliance} onChange={(e) => handleChange(item.id,'compliance',e.target.value)}  className="w-full border-none outline-none"/></div>
-                        <div><input type="date" value={item.dueDate} onChange={(e) => handleChange(item.id,'dueDate',e.target.value)} className="w-full border-none outline-none"/></div>
-                        <button onClick={() => handleDelete(item.id)} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Delete</button>
+                        <div>
+                          <input
+                            value={item.property}
+                            onChange={(e) =>
+                              handleChange(item.id, "property", e.target.value)
+                            }
+                            className="w-full border-none outline-none"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            value={item.compliance}
+                            onChange={(e) =>
+                              handleChange(
+                                item.id,
+                                "compliance",
+                                e.target.value,
+                              )
+                            }
+                            className="w-full border-none outline-none"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="date"
+                            value={item.dueDate}
+                            onChange={(e) =>
+                              handleChange(item.id, "dueDate", e.target.value)
+                            }
+                            className="w-full border-none outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+                        >
+                          Delete
+                        </button>
                       </div>
-                      
                     ))}
                     <button
-  onClick={() => addCompliance(status)}
-  className="mt-2 text-blue-500"
->
-  + Add Compliance
-</button>
+                      onClick={() => addCompliance(status)}
+                      className="mt-2 text-blue-500"
+                    >
+                      + Add Compliance
+                    </button>
                   </div>
                 );
               })}
-              
             </>
           ) : (
             <div>Card View</div>
